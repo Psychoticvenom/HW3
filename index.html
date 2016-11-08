@@ -1,0 +1,300 @@
+﻿<!DOCTYPE html>
+
+<html>
+
+<div id="info">HW3
+  <br> Press "Right" move the character right，Press "left" move the character left
+  <br> Press "Scape" to jump the character
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r70/three.min.js"></script>
+<script src="https://jyunming-chen.github.io/tutsplus/js/KeyboardState.js"></script>
+<script type="text/javascript">
+  document.oncontextmenu = function() {
+    return false;
+  }
+
+</script>
+
+<audio id="collisionsound" style="display:none">
+<source src="Sound/wa004.wav" type='audio/wav'>
+</audio>
+
+<audio id="Bgm" autoplay loop style="display:none">
+<source src="Sound/Bgm.mp3" type='audio/mpeg'>
+</audio>
+
+<script src="js/three.min.js"></script>
+<script src="js/OrbitControls.js"></script>
+
+<head>
+<style>
+
+#info {
+  position: absolute;
+  top: 0px;
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+  color: #000000
+}
+
+body {
+  overflow: hidden;
+}
+
+</style>
+</head>
+
+<body> 
+
+<script>
+
+var camera, scene, renderer;
+var satellite, angle = 0;
+var background;
+
+//var stats;
+var pos, vel, force, fgPos;//fg = foreground
+var clock = new THREE.Clock();
+var character, stArray = [];
+var chLR = 3, baseS = 0;
+var counter = 9, move = false;
+
+var keyboard = new KeyboardState();
+
+var collisionSound, soundTrack; // Sound for the Project
+
+var chH = 15; // Character's height / 2
+var chW = 7.5; // Character's width / 2
+init();
+animate();
+
+function setUpStArray() {
+  for (var i = 0; i < 5; i++) {
+    var row = [];
+    for (var j = 0; j < 5; j++)
+      row.push(new THREE.Vector2(j * 0.25, 1 - 0.25 * i));
+    stArray.push(row);
+  }
+}
+
+function height (x) {
+	var y = x % 100;
+	if (y > 0 && y < 15)
+  	return 20;
+  else
+  	return 0;
+}
+
+function init() {
+  collisionSound = document.getElementById ('collisionsound');
+  soundTrack = document.getElementById ('Bgm');
+  
+  renderer = new THREE.WebGLRenderer({
+    antialias: true
+  });
+
+  pos = new THREE.Vector3(-20, chH, 0);
+  vel = new THREE.Vector3(0, 0, 0);
+	
+  fgPos = new THREE.Vector3(0, 0, 0);
+  
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x888888);
+  document.body.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  camera = new THREE.OrthographicCamera(-50, 50, 85, -15, -10, 100);
+  camera.position.z = 10;
+
+  ////////////////////////////////////////////////////////////
+  THREE.ImageUtils.crossOrigin = '';
+  bgTexture = THREE.ImageUtils.loadTexture('http://i.imgur.com/Jg1HBch.png');
+  bgTexture.wrapS = THREE.RepeatWrapping;
+  
+  fgTexture = THREE.ImageUtils.loadTexture('http://i.imgur.com/at7vQiO.png');
+  fgTexture.wrapS = THREE.RepeatWrapping;
+  
+  //height texture
+  hiTexture =  THREE.ImageUtils.loadTexture('http://i.imgur.com/ktSufSZ.png');
+  hiTexture.wrapS = THREE.RepeatWrapping;
+  
+  setUpStArray();
+  chTexture = THREE.ImageUtils.loadTexture('https://i.imgur.com/BcAgS6x.png');
+  chTexture.wrapS = THREE.RepeatWrapping;
+  // setting up texMat
+  var chMat = new THREE.MeshBasicMaterial({
+    map: chTexture,
+    transparent: true,  // cutout texture: set transparent: true
+    side: THREE.DoubleSide
+  });
+  
+  // set the background and ground /////////////////////////////
+  background = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({
+      map: bgTexture
+    }));
+  background.position.y = 35;
+  scene.add(background);
+  
+  for (var i = 0; i < 5; i++) {
+  	var groundX = i * 100;
+    for (var j = groundX - 50; j <= groundX + 50; j+=10) {
+    	if(height(j) == 20) {
+      	var breakout = new THREE.Mesh(new THREE.PlaneGeometry(15, height(j)), new THREE.MeshBasicMaterial({
+          map : hiTexture,
+          transparent: true
+        }));
+        breakout.position.y = height(j) / 2;
+        breakout.position.x = j;
+      } 
+      
+      var ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 15), new THREE.MeshBasicMaterial({
+        map : fgTexture
+      }));
+      ground.position.y = -7.5;
+      ground.position.x = j;
+      
+      scene.add(ground);
+      scene.add(breakout);
+    }
+  }
+  // set the character
+  var geometry = new THREE.Geometry();
+  geometry.vertices.push(
+    new THREE.Vector3(-chW, -chH, 0),
+    new THREE.Vector3(chW, -chH, 0),
+    new THREE.Vector3(chW, chH, 0),
+    new THREE.Vector3(-chW, chH, 0)
+  );
+  var face;
+  face = new THREE.Face3(0, 1, 2);
+  geometry.faces.push(face);
+  face = new THREE.Face3(0, 2, 3);
+  geometry.faces.push(face);
+	geometry.faceVertexUvs[0].push([stArray[chLR][0], stArray[chLR][1], stArray[chLR - 1][1]]);
+  geometry.faceVertexUvs[0].push([stArray[chLR][0], stArray[chLR - 1][1], stArray[chLR - 1][0]]);
+
+  geometry.computeBoundingSphere();
+  geometry.computeFaceNormals();
+  geometry.computeVertexNormals();
+
+  character = new THREE.Mesh(geometry, chMat);
+  
+  scene.add(character);
+  scene.add(camera);
+
+  window.addEventListener('resize', onWindowResize, false);
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function spriteAnimate() {
+  var geometry = character.geometry;
+  var st0 = stArray[chLR][baseS];
+  var st1 = stArray[chLR][baseS + 1];
+  var st2 = stArray[chLR - 1][baseS + 1];
+  var st3 = stArray[chLR - 1][baseS];
+
+  geometry.faceVertexUvs[0] = [];
+  geometry.faceVertexUvs[0].push([st0, st1, st2]);
+  geometry.faceVertexUvs[0].push([st0, st2, st3]);
+  geometry.uvsNeedUpdate = true;
+
+  baseS = (baseS + 1) % 4;
+}
+
+function animate() {
+  var dt = clock.getDelta();
+
+  force = new THREE.Vector3(0, -100, 0);
+  // force: add gravity first
+  if (pos.y <= chH + height(pos.x)) { // if contact, add contact force
+    pos.y = chH + height(pos.x);
+    force.add(new THREE.Vector3(0, 100, 0));
+    vel.y *= -0.2;
+  }
+
+  // set the screen
+  if (pos.x <= -50 + chW) {
+    pos.x = -50 + chW;
+  } else if (pos.x >= 450 - chW) {
+    pos.x = 450 - chW;
+  }
+  if (pos.x > camera.position.x + 7) {
+    camera.position.x = pos.x - 7;
+    background.position.x = pos.x - 7;
+  } else if (pos.x < camera.position.x - 7) {
+    camera.position.x = pos.x + 7;
+    background.position.x = pos.x + 7;
+  }
+  if (camera.position.x <= 0) {
+    camera.position.x = 0;
+    background.position.x = 0;
+  } else if (camera.position.x >= 400) {
+    camera.position.x = 400;
+    background.position.x = 400;
+  }
+
+  // contorl the character
+  if (character.position.y <= chH + height(pos.x) + 5e-1) {
+    if (keyboard.down('space')) {
+    	move = false;
+      vel.add(new THREE.Vector3(0, 70, 0));
+    } else if (keyboard.pressed('right')) {
+    	chLR = 3;
+      counter++;
+      move = true;
+      vel = new THREE.Vector3(30, 0, 0);
+    } else if (keyboard.pressed('left')) {
+    	chLR = 2;
+      counter++;
+      move = true;
+      vel = new THREE.Vector3(-30, 0, 0);
+    } else {
+    	vel.x = 0;
+      baseS = 0;
+      counter = 9;
+      move = false;
+      spriteAnimate();
+    }
+  }
+  else
+  	move = false;
+  if (counter % 10 === 0 && move == true)
+    spriteAnimate();
+  
+  
+  // determine whether it is possible to make the horizontal move
+  var sign = vel.x > 0 ? .2 : -.8;
+  if(height (pos.x + (chW * sign)) > pos.y){
+  	pos.x -= 0.5 * sign;
+    vel = new THREE.Vector3(0, 0, 0);
+		collisionSound.play();
+  }
+
+  // then do Euler's
+  vel.add(force.clone().multiplyScalar(dt));
+  pos.add(vel.clone().multiplyScalar(dt));
+  character.position.copy(pos);
+  
+	//foreground.position.copy(fgPos);
+  
+  keyboard.update();
+  requestAnimationFrame(animate);
+  render();
+}
+
+function render() {
+  renderer.render(scene, camera);
+}
+
+window.focus();
+
+</script>
+</body>
+
+</html>
